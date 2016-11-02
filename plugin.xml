@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="cordova-plugin-googledrive" version="0.1" 
+	xmlns="http://apache.org/cordova/ns/plugins/1.0" 
+	xmlns:android="http://schemas.android.com/apk/res/android">
+
+	<name>GoogleDrive</name>
+	<license>Apache 2.0</license>
+	<description>Upload and Download file to Google Drive</description>
+    <keywords>google drive,upload file, download file</keywords>
+	
+	<js-module name="GoogleDrive" src="www/GoogleDrive.js">
+		<clobbers target="googleDrive" />
+	</js-module>
+	
+	<platform name="android">
+		<config-file parent="/*" target="res/xml/config.xml">
+			<feature name="GoogleDrive">
+				<param name="android-package" value="com.jp.googledrive.GoogleDrive" />
+			</feature>
+		</config-file>
+		<source-file src="src/android/com/jp/googledrive/GoogleDrive.java" target-dir="src/com/jp/googledrive" />
+	</platform>
+	
+</plugin>
