@@ -1,6 +1,6 @@
 {
   "name": "GoogleDrive",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Upload and Download file to Google Drive",
   "cordova": {
     "id": "cordova-plugin-googledrive",

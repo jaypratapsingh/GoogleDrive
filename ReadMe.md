@@ -12,6 +12,8 @@ cordova plugin remove cordova-plugin-googledrive
 
 Put the below code in your javascript code to run plugin:
 
+---------------------------------------------------
+
 googleDrive.uploadFile(
 	function(success) {
 		alert("All file has been successfully uploaded");
@@ -21,7 +23,19 @@ googleDrive.uploadFile(
     }, filePath);
 	
 	
+	
 filePath : Full File path 
+
+
+-------------------------------------------------
+
+googleDrive.downloadFile(
+	function(success) {
+		alert(success);
+    },
+	function(error) {
+		alert(error);
+    }, "");
 
 
 

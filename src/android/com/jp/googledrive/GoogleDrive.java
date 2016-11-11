@@ -1,12 +1,20 @@
 package com.jp.googledrive;
 
+import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.OpenableColumns;
+import android.support.annotation.NonNull;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -14,18 +22,33 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.drive.Drive;
 import com.google.android.gms.drive.DriveApi;
+import com.google.android.gms.drive.DriveContents;
+import com.google.android.gms.drive.DriveFile;
 import com.google.android.gms.drive.DriveFolder;
 import com.google.android.gms.drive.DriveId;
+import com.google.android.gms.drive.DriveResource;
 import com.google.android.gms.drive.MetadataChangeSet;
+import com.google.android.gms.drive.OpenFileActivityBuilder;
+import com.google.android.gms.drive.metadata.CustomPropertyKey;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.URL;
+import java.net.URLConnection;
+
 /**
  * This class echoes a string called from JavaScript.
  */
@@ -36,25 +59,35 @@ public class GoogleDrive extends CordovaPlugin implements GoogleApiClient.Connec
     private String displayName = null, filePath = "";
     private CallbackContext callbackContext;
     private String[] filePathArray;
+    private DriveId mSelectedFileDriveId;
+    private String action;
+    Activity activity;
 	
     public boolean execute(String action, String filePath, CallbackContext callbackContext) throws JSONException {
+
+        this.action = action;
+        this.callbackContext = callbackContext;
 
         if (action.equals("uploadFile")) {
 
             this.filePathArray = filePath.split(",");
-            this.callbackContext = callbackContext;
-
-            googleApiClientSet();
-
+            Log.i("TAG", filePath);
+            googleApiClientSet(cordova.getActivity());
             return true;
         }
+        else if (action.equals("downloadFile")) {
+            googleApiClientSet(cordova.getActivity());
+            return true;
+        }
+
+
         return false;
     }
 
 	
-	protected void googleApiClientSet() {
+	protected void googleApiClientSet(Activity activity) {
         if (mGoogleApiClient == null) {
-            mGoogleApiClient = new GoogleApiClient.Builder(cordova.getActivity())
+            mGoogleApiClient = new GoogleApiClient.Builder(activity)
                     .addApi(Drive.API)
                     .addScope(Drive.SCOPE_FILE)
                     .addConnectionCallbacks(this)
@@ -108,18 +141,95 @@ public class GoogleDrive extends CordovaPlugin implements GoogleApiClient.Connec
     @Override
     public void onConnected(Bundle connectionHint) {
         Log.i("TAG","GoogleApiClient connected");
-        uploadFile();
+        if(action.equals("uploadFile"))
+        {
+            uploadFile(0);
+        }
+        else if(action.equals("downloadFile")) {
+            openDrive();
+        }
+        else if(action.equals("driveDownload"))
+        {
+            new AsyncTask<Void, Void, Void>() {
+
+                @Override
+                protected Void doInBackground( Void... voids ) {
+                    DriveFile file = Drive.DriveApi.getFile(mGoogleApiClient,mSelectedFileDriveId);
+                    DriveResource.MetadataResult mdRslt = file.getMetadata(mGoogleApiClient).await();
+                    if (mdRslt != null && mdRslt.getStatus().isSuccess()) {
+                        String link = mdRslt.getMetadata().getWebContentLink();
+                        Log.d("LINK", link);
+
+                        try {
+                            URL url1 = new URL(link);
+                            URLConnection conection = url1.openConnection();
+                            conection.connect();
+
+
+                            File dir = new File(Environment.getExternalStorageDirectory(), "EQWaybill");
+                            if(!dir.exists()) {
+                                dir.mkdir();
+                            }
+
+                            File file1 = new File(dir, mdRslt.getMetadata().getOriginalFilename());
+
+                            BufferedInputStream in = null;
+                            FileOutputStream fout = null;
+                            try {
+                                in = new BufferedInputStream(url1.openStream());
+                                fout = new FileOutputStream(file1);
+
+
+                                byte[] buffer = new byte[1024];
+                                int len = 0;
+                                while ((len = in.read(buffer)) > 0) {
+                                    fout.write(buffer, 0, len );
+                                }
+                                fout.flush();
+
+                            } finally {
+                                if (in != null) {
+                                    in.close();
+                                }
+                                if (fout != null) {
+                                    fout.close();
+                                }
+                            }
+
+
+                        }
+                        catch (Exception e) {
+                            e.printStackTrace();
+                        }
+
+
+                    }
+                    return null;
+                }
+
+                @Override
+                protected void onPostExecute(Void aVoid) {
+                    super.onPostExecute(aVoid);
+                    onStop();
+                }
+            }.execute();
+
+
+        }
+
     }
 
 
-    public void uploadFile() {
+    public void uploadFile(int id) {
 
         try {
+            Log.d("TAG", ""+id);
 
-            for (int i = 0; i < filePathArray.length; i++) {
-                filePath = filePathArray[i];
+            final int elementID = id;
 
-                filePath = filePath.substring(1, filePath.length() - 1);
+            if(elementID < filePathArray.length) {
+                filePath = filePathArray[elementID];
+                filePath = filePath.replace('"', ' ');
                 Uri uri = Uri.parse(filePath);
                 String uriString = uri.toString();
 
@@ -156,7 +266,14 @@ public class GoogleDrive extends CordovaPlugin implements GoogleApiClient.Connec
                                 // Get an output stream for the contents.
                                 OutputStream outputStream = result.getDriveContents().getOutputStream();
                                 // Write the bitmap data from it.
-                                File file = new File(filePath);
+
+                                File dir = new File(Environment.getExternalStorageDirectory(), "EQWaybill");
+                                if(!dir.exists()) {
+                                    dir.mkdir();
+                                }
+                                File file = new File(dir, displayName);
+
+                                Log.i("TAG", ""+file);
                                 try {
                                     byte[] buffer = new byte[1024];
                                     FileInputStream fis = new FileInputStream(file);
@@ -165,41 +282,36 @@ public class GoogleDrive extends CordovaPlugin implements GoogleApiClient.Connec
                                         outputStream.write(buffer, 0, read);
                                         System.out.println("read " + read + " bytes,");
                                     }
+
+                                    CustomPropertyKey approvalPropertyKey = new CustomPropertyKey("approved", CustomPropertyKey.PUBLIC);
+                                    MetadataChangeSet metadataChangeSet = new MetadataChangeSet.Builder()
+                                            .setTitle(displayName).setMimeType("application/pdf")
+                                            .setCustomProperty(approvalPropertyKey, "yes").build();
+
+                                    Drive.DriveApi.getRootFolder(mGoogleApiClient)
+                                            .createFile(mGoogleApiClient, metadataChangeSet, result.getDriveContents())
+                                            .setResultCallback(fileCallback);
+
+                                    int val = elementID + 1;
+                                    uploadFile(val);
                                 } catch (Exception e1) {
                                     e1.printStackTrace();
                                     Log.i("TAG", "Unable to write file contents.");
+                                    onStop();
                                 }
 
-                                // Create the initial metadata - MIME type and title.
-                                // Note that the user will be able to change the title later.
-
-                                MetadataChangeSet metadataChangeSet = new MetadataChangeSet.Builder()
-                                        .setTitle(displayName).setMimeType("application/pdf").build();
-
-                                // Create an intent for the file chooser, and start it.
-                /*IntentSender intentSender = Drive.DriveApi
-					.newCreateFileActivityBuilder()
-					.setInitialMetadata(metadataChangeSet)
-					.setInitialDriveContents(result.getDriveContents())
-					.build(mGoogleApiClient);
-
-				try {
-                    cordova.getActivity().startIntentSenderForResult(intentSender, 300, null, 0, 0, 0);
-                } catch (IntentSender.SendIntentException e) {
-					Log.i("TAG", "Failed to launch file chooser.");
-				}*/
-
-
-                                // Create a file in the root folder
-                                Drive.DriveApi.getRootFolder(mGoogleApiClient)
-                                        .createFile(mGoogleApiClient, metadataChangeSet, result.getDriveContents())
-                                        .setResultCallback(fileCallback);
                             }
                         });
+
             }
+            else {
+                onStop();
+            }
+
             callbackContext.success("file successfully uploaded");
         }
         catch (Exception e) {
+            onStop();
             callbackContext.error("something went wrong");
             e.printStackTrace();
         }
@@ -218,6 +330,56 @@ public class GoogleDrive extends CordovaPlugin implements GoogleApiClient.Connec
                 }
             };
 
+
+
+    public void openDrive() {
+        IntentSender intentSender = Drive.DriveApi
+                .newOpenFileActivityBuilder()
+                .setMimeType(new String[]{ DriveFolder.MIME_TYPE, "application/pdf" })
+                .build(mGoogleApiClient);
+        try {
+            cordova.getActivity().startIntentSenderForResult(intentSender, 1, null, 0, 0, 0);
+        } catch (IntentSender.SendIntentException e) {
+            Log.w("TAG", "Unable to send intent", e);
+        }
+
+    }
+
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        //if (requestCode == 111) {
+
+        /*} else {
+            super.onActivityResult(requestCode, resultCode, data);
+        }*/
+    }
+
+
+    public void parseDownloadData(Intent data, Activity activity, String action) {
+        try {
+            Log.e("aaaaa", "aaaaa");
+            this.action = action;
+            this.activity = activity;
+            if(data!=null) {
+                mSelectedFileDriveId = (DriveId) data.getParcelableExtra(
+                        OpenFileActivityBuilder.EXTRA_RESPONSE_DRIVE_ID);
+                Log.e("file id", mSelectedFileDriveId.getResourceId() + "");
+                String url = "https://drive.google.com/open?id="+ mSelectedFileDriveId.getResourceId();
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setData(Uri.parse(url));
+                activity.startActivity(i);
+            }
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+
+
+
     /**
      * It invoked when connection suspended
      * @param cause
@@ -228,28 +390,4 @@ public class GoogleDrive extends CordovaPlugin implements GoogleApiClient.Connec
     }
 
 
-    @Override
-    public void onActivityResult(final int requestCode,
-                                    final int resultCode, final Intent data) {
-        switch (requestCode) {
-
-            case 100:
-
-               /* if (resultCode == RESULT_OK) {
-                    mFileId = (DriveId) data.getParcelableExtra(
-                            OpenFileActivityBuilder.EXTRA_RESPONSE_DRIVE_ID);
-                    Log.e("file id", mFileId.getResourceId() + "");
-                    String url = "https://drive.google.com/open?id="+ mFileId.getResourceId();
-                    Intent i = new Intent(Intent.ACTION_VIEW);
-                    i.setData(Uri.parse(url));
-                    startActivity(i);
-                }*/
-
-                break;
-
-            default:
-                super.onActivityResult(requestCode, resultCode, data);
-                break;
-        }
-    }
 }
