@@ -1,18 +1,21 @@
-**********Cordova : Google Drive**************
+# *********Cordova : Google Drive*************
+
 
 By using this plugin you can upload or download file from Google Drive
 
-Install this plugin using:
+## Install this plugin using:
 
 cordova plugin add cordova-plugin-googledrive
 
-Remove Plugins :
+
+## Remove Plugins :
 
 cordova plugin remove cordova-plugin-googledrive
 
-Put the below code in your javascript code to run plugin:
 
----------------------------------------------------
+## Put the below code in your javascript code to run plugin:
+
+### For Upload File:
 
 googleDrive.uploadFile(
 	function(success) {
@@ -24,10 +27,11 @@ googleDrive.uploadFile(
 	
 	
 	
-filePath : Full File path 
+	
+*filePath : Full File path* 
 
 
--------------------------------------------------
+### For Download File:
 
 googleDrive.downloadFile(
 	function(success) {
@@ -39,6 +43,8 @@ googleDrive.downloadFile(
 
 
 
-GitHub URL: https://github.com/jaypratapsingh/GoogleDrive
+##
 
-npm url : https://www.npmjs.com/package/GoogleDrive
+> GitHub URL: https://github.com/jaypratapsingh/GoogleDrive
+
+> npm url : https://www.npmjs.com/package/GoogleDrive
